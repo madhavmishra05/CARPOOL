@@ -5,31 +5,48 @@ public class projectSheduler {
     public List<project> generateOptimalSchedule(List<project> projects) {
 
         int maxDays = 5;
+        int n = projects.size();
 
-        // Sort by revenue descending
-        projects.sort((a, b) ->
-                Double.compare(b.getExpectedRevenue(), a.getExpectedRevenue()));
+        // Sort by deadline ascending (important for DP)
+        projects.sort(Comparator.comparingInt(project::getDeadline));
 
-        project[] schedule = new project[maxDays];
+        // dp[i][d] = maximum revenue using first i projects within d days
+        double[][] dp = new double[n + 1][maxDays + 1];
 
-        for (project project : projects) {
+        for (int i = 1; i <= n; i++) {
 
-            // If deadline is more than working days, limit it
-            int deadline = Math.min(project.getDeadline(), maxDays);
+            project current = projects.get(i - 1);
 
-            // Try to schedule on latest possible day
-            for (int day = deadline - 1; day >= 0; day--) {
+            for (int d = 1; d <= maxDays; d++) {
 
-                if (schedule[day] == null) {
-                    schedule[day] = project;
-                    break;
+                // Option 1: skip current project
+                dp[i][d] = dp[i - 1][d];
+
+                // Option 2: take current project (if deadline allows)
+                if (d <= current.getDeadline()) {
+                    dp[i][d] = Math.max(
+                            dp[i][d],
+                            dp[i - 1][d - 1] + current.getExpectedRevenue()
+                    );
                 }
             }
         }
 
-        return Arrays.stream(schedule)
-                .filter(Objects::nonNull)
-                .toList();
+        // Backtrack to get selected projects
+        List<project> result = new ArrayList<>();
+        int d = maxDays;
+
+        for (int i = n; i > 0 && d > 0; i--) {
+
+            if (dp[i][d] != dp[i - 1][d]) {
+                project selected = projects.get(i - 1);
+                result.add(selected);
+                d--;
+            }
+        }
+
+        return result;
     }
-    }
+}
+    
 
