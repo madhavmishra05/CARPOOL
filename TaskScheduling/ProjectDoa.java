@@ -4,45 +4,55 @@ import java.util.List;
 
 public class ProjectDoa {
 
-    // Insert Project
     public void addProject(project project) throws SQLException {
 
-        String sql = "INSERT INTO projects (title, deadline, revenue) VALUES (?, ?, ?)";
+        String sql =
+                "INSERT INTO projects (title, deadline, revenue, submission_day) VALUES (?, ?, ?, ?)";
 
-        try (Connection conn = DBconnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
+        Connection conn = DBconnection.getConnection();
 
-            stmt.setString(1, project.getTitle());
-            stmt.setInt(2, project.getDeadline());
-            stmt.setDouble(3, project.getExpectedRevenue());
+        PreparedStatement stmt = conn.prepareStatement(sql);
 
-            stmt.executeUpdate();
-            System.out.println("Project added successfully!");
-        }
+        stmt.setString(1, project.getTitle());
+        stmt.setInt(2, project.getDeadline());
+        stmt.setDouble(3, project.getExpectedRevenue());
+        stmt.setString(4, project.getSubmissionDay());
+
+        stmt.executeUpdate();
+
+        System.out.println("Project added successfully!");
+
+        conn.close();
     }
 
-    // Fetch All Projects
     public List<project> getAllProjects() throws SQLException {
 
-        List<project> projects = new ArrayList<>();
+        List<project> list = new ArrayList<>();
+
         String sql = "SELECT * FROM projects";
 
-        try (Connection conn = DBconnection.getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
+        Connection conn = DBconnection.getConnection();
 
-            while (rs.next()) {
-                project project = new project(
-                        rs.getString("title"),
-                        rs.getInt("deadline"),
-                        rs.getDouble("revenue")
-                );
-                project.setProjectId(rs.getInt("id"));
+        Statement stmt = conn.createStatement();
 
-                projects.add(project);
-            }
+        ResultSet rs = stmt.executeQuery(sql);
+
+        while (rs.next()) {
+
+            project p = new project(
+                    rs.getString("title"),
+                    rs.getInt("deadline"),
+                    rs.getDouble("revenue"),
+                    rs.getString("submission_day")
+            );
+
+            p.setProjectId(rs.getInt("id"));
+
+            list.add(p);
         }
 
-        return projects;
+        conn.close();
+
+        return list;
     }
 }
