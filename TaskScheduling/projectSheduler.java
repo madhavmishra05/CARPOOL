@@ -1,78 +1,321 @@
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 public class ProjectScheduler {
 
-    private final int MAX_DAYS = 5;
+    private static final int MAX_WORKING_DAYS = 5;
 
-    private List<project> bestSchedule = new ArrayList<>();
+    private List<project> missedProjects = new ArrayList<>();
+    private List<project> futureProjects = new ArrayList<>();
 
-    private double maxProfit = 0;
+    private Scanner scanner = new Scanner(System.in);
 
-    public List<project> generateOptimalSchedule(List<project> projects) {
-
-        projects.sort((a, b) -> {
-            if (Double.compare(b.getExpectedRevenue(), a.getExpectedRevenue()) != 0) {
-                return Double.compare(b.getExpectedRevenue(), a.getExpectedRevenue());
-            } else {
-                return Integer.compare(a.getDeadline(), b.getDeadline());
-            }
-        });
-
-        boolean[] usedDays = new boolean[MAX_DAYS];
-
-        List<project> currentSchedule = new ArrayList<>();
-
-        backtrack(projects, 0, usedDays, currentSchedule, 0);
-
-        return bestSchedule;
+    public List<project> getMissedProjects() {
+        return missedProjects;
     }
 
-    private void backtrack(List<project> projects,
-                           int index,
-                           boolean[] usedDays,
-                           List<project> currentSchedule,
-                           double currentProfit) {
+    public List<project> getFutureProjects() {
+        return futureProjects;
+    }
 
-        if (currentProfit > maxProfit) {
+    // =========================
+    // THIS WEEK SCHEDULE
+    // =========================
+    public void generateThisWeekSchedule(ProjectDoa dao) throws Exception {
 
-            maxProfit = currentProfit;
+        List<project> projects = dao.getAllProjects();
 
-            bestSchedule = new ArrayList<>(currentSchedule);
-        }
+        if (projects.isEmpty()) {
 
-        if (index >= projects.size()) {
+            System.out.println("No projects available.");
             return;
         }
 
-        project currentProject = projects.get(index);
+        System.out.print("Enter Scheduling Day (Sat/Sun): ");
+        String schedulingDay = scanner.next().toLowerCase();
 
-        int deadline = Math.min(currentProject.getDeadline(), MAX_DAYS);
+        System.out.print("Enter Busy Days (0-5): ");
+        int busyTillDay = scanner.nextInt();
 
-        for (int day = 0; day < deadline; day++) {
+        System.out.print("Enter Last Week Avg Profit: ");
+        double lastWeekAvg = scanner.nextDouble();
 
-            if (!usedDays[day]) {
+        System.out.print("Enter Last 3 Week Avg Profit: ");
+        double lastThreeWeekAvg = scanner.nextDouble();
 
-                usedDays[day] = true;
+        List<project> schedule =
+                generateOptimalSchedule(
+                        projects,
+                        schedulingDay,
+                        busyTillDay,
+                        lastWeekAvg,
+                        lastThreeWeekAvg);
 
-                currentSchedule.add(currentProject);
+        printSchedule(schedule, busyTillDay, "THIS WEEK");
+    }
 
-                backtrack(projects,
-                        index + 1,
-                        usedDays,
-                        currentSchedule,
-                        currentProfit + currentProject.getExpectedRevenue());
+    // =========================
+    // NEXT WEEK SCHEDULE
+    // =========================
+    public void generateNextWeekSchedule() {
 
-                usedDays[day] = false;
+        if (futureProjects.isEmpty()) {
 
-                currentSchedule.remove(currentSchedule.size() - 1);
+            System.out.println("No future projects available.");
+            return;
+        }
+
+        System.out.print("Enter Last Week Avg Profit: ");
+        double lastWeekAvg = scanner.nextDouble();
+
+        System.out.print("Enter Last 3 Week Avg Profit: ");
+        double lastThreeWeekAvg = scanner.nextDouble();
+
+        List<project> nextWeekProjects = new ArrayList<>();
+
+        for (project p : futureProjects) {
+
+            int remaining = p.getRemainingDeadline() - MAX_WORKING_DAYS;
+
+            if (remaining > -MAX_WORKING_DAYS) {
+
+                project copy =
+                        new project(
+                                p.getProjectId(),
+                                p.getTitle(),
+                                "sunday",
+                                remaining,
+                                p.getExpectedRevenue());
+
+                copy.setRemainingDeadline(remaining);
+
+                nextWeekProjects.add(copy);
             }
         }
 
-        backtrack(projects,
-                index + 1,
-                usedDays,
-                currentSchedule,
-                currentProfit);
+        List<project> schedule =
+                generateOptimalSchedule(
+                        nextWeekProjects,
+                        "sunday",
+                        0,
+                        lastWeekAvg,
+                        lastThreeWeekAvg);
+
+        printSchedule(schedule, 0, "NEXT WEEK");
+    }
+
+    // =========================
+    // CORE GREEDY LOGIC
+    // =========================
+    public List<project> generateOptimalSchedule(
+            List<project> projects,
+            String schedulingDay,
+            int busyTillDay,
+            double lastWeekAvg,
+            double lastThreeWeekAvg) {
+
+        missedProjects.clear();
+        futureProjects.clear();
+
+        project[] schedule = new project[MAX_WORKING_DAYS];
+
+        List<project> critical = new ArrayList<>();
+        List<project> safe = new ArrayList<>();
+
+        Map<project, Integer> remainingMap = new HashMap<>();
+
+        int planningOffset =
+                schedulingDay.equalsIgnoreCase("sunday") ? 1 : 2;
+
+        // STEP 1: Calculate remaining deadlines
+        for (project p : projects) {
+
+            int remaining;
+
+            if (p.getRemainingDeadline() == p.getDeadline()) {
+
+                int daysPassed =
+                        getDaysBetween(
+                                p.getSubmissionDay(),
+                                schedulingDay);
+
+                remaining =
+                        p.getDeadline()
+                                - (daysPassed + planningOffset);
+
+            } else {
+
+                remaining =
+                        p.getRemainingDeadline()
+                                - MAX_WORKING_DAYS;
+            }
+
+            p.setRemainingDeadline(remaining);
+
+            remainingMap.put(p, remaining);
+
+            if (remaining < 0)
+                missedProjects.add(p);
+
+            else if (remaining <= MAX_WORKING_DAYS)
+                critical.add(p);
+
+            else {
+                safe.add(p);
+                futureProjects.add(p);
+            }
+        }
+
+        // STEP 2: Sort critical → earliest deadline first, highest revenue second
+        critical.sort((a, b) -> {
+
+            int remA = remainingMap.get(a);
+            int remB = remainingMap.get(b);
+
+            if (remA != remB)
+                return Integer.compare(remA, remB);
+
+            return Double.compare(
+                    b.getExpectedRevenue(),
+                    a.getExpectedRevenue());
+        });
+
+        // STEP 3: Sort safe → highest revenue first
+        safe.sort((a, b) ->
+                Double.compare(
+                        b.getExpectedRevenue(),
+                        a.getExpectedRevenue()));
+
+        // STEP 4: Combine
+        List<project> ordered = new ArrayList<>();
+        ordered.addAll(critical);
+        ordered.addAll(safe);
+
+        // STEP 5: Assign greedily
+        int pointer = busyTillDay;
+
+        for (project p : ordered) {
+
+            if (pointer >= MAX_WORKING_DAYS)
+                break;
+
+            schedule[pointer] = p;
+
+            futureProjects.remove(p);
+
+            pointer++;
+        }
+
+        // STEP 6: Convert to result list
+        List<project> result = new ArrayList<>();
+
+        for (int i = busyTillDay; i < MAX_WORKING_DAYS; i++) {
+
+            if (schedule[i] != null)
+                result.add(schedule[i]);
+        }
+
+        return result;
+    }
+
+    // =========================
+    // PRINT METHOD (FIXED)
+    // =========================
+    private void printSchedule(
+            List<project> schedule,
+            int startDay,
+            String week) {
+
+        System.out.println("\n===== Schedule for " + week + " =====");
+
+        int day = startDay + 1;
+
+        double totalProfit = 0;
+
+        for (project p : schedule) {
+
+            System.out.println(
+                    "Day "
+                            + day++
+                            + " → "
+                            + p.getTitle()
+                            + " | Revenue: ₹"
+                            + p.getExpectedRevenue()
+                            + " | Remaining Deadline: "
+                            + p.getRemainingDeadline()
+                            + " days");
+
+            totalProfit += p.getExpectedRevenue();
+        }
+
+        System.out.println("\n💰 Total Profit: ₹" + totalProfit);
+
+        // MISSED PROJECTS
+        System.out.println("\n===== Missed Projects =====");
+
+        if (missedProjects.isEmpty()) {
+
+            System.out.println("None");
+
+        } else {
+
+            for (project p : missedProjects) {
+
+                System.out.println(
+                        p.getTitle()
+                                + " | Deadline Missed (expired: "
+                                + p.getRemainingDeadline()
+                                + " days)");
+            }
+        }
+
+        // FUTURE PROJECTS
+        System.out.println("\n===== Future Projects =====");
+
+        if (futureProjects.isEmpty()) {
+
+            System.out.println("None");
+
+        } else {
+
+            for (project p : futureProjects) {
+
+                System.out.println(
+                        p.getTitle()
+                                + " | Remaining Deadline: "
+                                + p.getRemainingDeadline()
+                                + " days");
+            }
+        }
+    }
+
+    // =========================
+    // UTILITY FUNCTION
+    // =========================
+    public static int getDaysBetween(
+            String submissionDay,
+            String schedulingDay) {
+
+        List<String> days =
+                Arrays.asList(
+                        "monday",
+                        "tuesday",
+                        "wednesday",
+                        "thursday",
+                        "friday",
+                        "saturday",
+                        "sunday");
+
+        int sub =
+                days.indexOf(submissionDay.toLowerCase());
+
+        int sch =
+                days.indexOf(schedulingDay.toLowerCase());
+
+        int diff = sch - sub;
+
+        if (diff < 0)
+            diff += 7;
+
+        return diff;
     }
 }
