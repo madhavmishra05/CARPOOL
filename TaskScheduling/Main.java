@@ -4,67 +4,97 @@ import java.util.Scanner;
 public class Main {
 
     static Scanner scanner = new Scanner(System.in);
+
     static ProjectDoa dao = new ProjectDoa();
-    static projectSheduler scheduler = new projectSheduler();
+
+    static ProjectScheduler scheduler = new ProjectScheduler();
 
     public static void main(String[] args) throws Exception {
 
         while (true) {
 
-            System.out.println("\n1. Add Project");
+            System.out.println("\n===== Intelligent Project Scheduler =====");
+
+            System.out.println("1. Add Project");
             System.out.println("2. View Projects");
-            System.out.println("3. Generate Schedule");
-            System.out.println("4. Exit");
+            System.out.println("3. Generate Schedule (This Week)");
+            System.out.println("4. Generate Schedule (Next Week)");
+            System.out.println("5. Exit");
+
+            System.out.print("Enter choice: ");
 
             int choice = scanner.nextInt();
 
             switch (choice) {
 
-                case 1 -> addProject();
-                case 2 -> viewProjects();
-                case 3 -> generateSchedule();
-                case 4 -> exitfunct();
+                case 1:
+                    addProject();
+                    break;
+
+                case 2:
+                    viewProjects();
+                    break;
+
+                case 3:
+                    scheduler.generateThisWeekSchedule(dao);
+                    break;
+
+                case 4:
+                    scheduler.generateNextWeekSchedule();
+                    break;
+
+                case 5:
+                    System.exit(0);
             }
         }
     }
 
-    static  void exitfunct()
-    {
-        System.out.println("Thank You For Using The Project Sheduler");
-        System.exit(0);
-    }
     static void addProject() throws Exception {
 
         scanner.nextLine();
 
-        System.out.print("Title: ");
+        System.out.print("Enter Title: ");
         String title = scanner.nextLine();
 
-        System.out.print("Deadline : ");
+        System.out.print("Enter Submission Day: ");
+        String submissionDay = scanner.nextLine();
+
+        System.out.print("Enter Deadline: ");
         int deadline = scanner.nextInt();
 
-        System.out.print("Revenue: ");
+        System.out.print("Enter Revenue: ");
         double revenue = scanner.nextDouble();
 
-        project project = new project(title, deadline, revenue);
-        dao.addProject(project);
+        project p =
+                new project(title, deadline, revenue, submissionDay);
+
+        dao.addProject(p);
+
+        System.out.println("Project added successfully.");
     }
 
     static void viewProjects() throws Exception {
-        List<project> projects = dao.getAllProjects();
-        projects.forEach(System.out::println);
-    }
 
-    static void generateSchedule() throws Exception {
+        List<project> list = dao.getAllProjects();
 
-        List<project> projects = dao.getAllProjects();
-        List<project> schedule = scheduler.generateOptimalSchedule(projects);
+        if (list.isEmpty()) {
 
-        System.out.println("\nOptimal Weekly Schedule:");
-        int day = 1;
+            System.out.println("No projects found.");
+            return;
+        }
 
-        for (project p : schedule) {
-            System.out.println("Day " + day++ + " -> " + p.getTitle());
+        for (project p : list) {
+
+            System.out.println(
+                    p.getProjectId()
+                            + " | "
+                            + p.getTitle()
+                            + " | "
+                            + p.getSubmissionDay()
+                            + " | Deadline: "
+                            + p.getDeadline()
+                            + " | Revenue: "
+                            + p.getExpectedRevenue());
         }
     }
 }
